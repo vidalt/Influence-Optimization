@@ -1,0 +1,15 @@
+name = "GLCIP"
+uuid = "f2f6af92-9624-11ea-2a0a-9937fb3be0fc"
+authors = ["Vinicius Ferreira de Souza"]
+version = "0.1.0"
+
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
+MathProgBase = "fdba3010-5040-5b88-9595-932c9decdf73"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+TikzGraphs = "b4f28e30-c73f-5eaf-a395-8a9db949a742"
+TikzPictures = "37f6aa50-8035-52d0-81c2-5a1d08754b2d"
