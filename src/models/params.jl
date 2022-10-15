@@ -12,24 +12,10 @@ const params_icc = Dict(
 
    :cut_tolerance => 0.1, # cut tol
    :cut_multiplier => 1000000, # new cut multiplier
-   :cut_gap => 0.1 # minimum node gap to add cuts
+)
 
-   # hamilton | Dev
-   # :cut_tolerance => 0.1, # cut tol
-   # :cut_multiplier => 1000000, # new cut multiplier
-   # :rounding_cuts => [6], # C+ϵ used in the rouding cut e.g. 6+ϵ
-   # :rounding_epsilon => 0.001, # 1+ϵ used in the new cut
-   #
-   # # :cut => "", # Cut useds
-   # :cuts => [], # Cuts used
-   #
-   # # Covercut1
-   # :cut_rounds_init => 2000,
-   # :cut_rounds_max_time => 3600, # Seconds
-   #
-   #  # Covercut2
-   #  :cut_rounds_max_time2 => 3600, # Seconds
-   #  :cut_rounds2_gap => 5 # (%)
+const params_cf = Dict(
+   :cut_gap => 0.1 # minimum node gap to add cuts
 )
 
 const params_cplex = Dict(

@@ -31,6 +31,11 @@ function run_glcip(app, input_file)
 
         app[command]["cuts"] = "cover_cut2"
         app[command]["step2"] = true
+    elseif command == "cf"
+        @info("<== CF ==>")
+
+        app[command]["cuts"] = "cover_cut2"
+        # app[command]["step2"] = true
     end
 
     solution = solve_glcip(data, input_file, app)
@@ -125,7 +130,8 @@ if isempty(ARGS)
     # main(["GLCIP/src/notebooks/Grafo_GLCIP_Exemplo_Dissertacao", "-l", "bc", "-a", "0.1", "-c", "cover_cut"])
 
     # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-a", "0.1", "-g", "1.0", "icc", "-r", "2000"])
-    main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "licc+"])
+    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "cf"])
+    main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i5", "-a", "0.1", "cf"])
 
     # arg_string = "data/socnet-instances-v2/SW-n50-k4-b0.3-d1-10-g0.7-i1 bc -a 0.5 -u 60"
     # main(split(arg_string))

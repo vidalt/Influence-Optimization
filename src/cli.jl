@@ -80,5 +80,8 @@ function parse_commandline(args::Array{String,1})
     # @add_arg_table! s["licc+"] begin
     # end
 
+    # @add_arg_table! s["cf"] begin
+    # end
+
     return parse_args(args, s)
 end
