@@ -24,16 +24,15 @@ function solve_glcip(data::DataGlcip, input_file, app)
     # W = data.weights
     # INCENTIVES = data.incentives
 
-    if status == :Optimal
-        out_x = zeros(Int, length(data.nodes))
-        out_y = zeros(Int, length(data.nodes))
-        out_z = zeros(Int, length(data.nodes), length(data.nodes))
+    out_x = zeros(Int, length(data.nodes))
+    out_y = zeros(Int, length(data.nodes))
+    out_z = zeros(Int, length(data.nodes), length(data.nodes))
 
+    if status == :Optimal
         # Variable - X
         if haskey(variables, :x)
             x = variables[:x]
             for i in data.nodes
-
                 x_i = round(getvalue(x[i]))
                 if x_i > 0
                     out_x[i] = x_i
@@ -48,10 +47,10 @@ function solve_glcip(data::DataGlcip, input_file, app)
             z = variables[:z]
             for i in data.nodes
                 for j in N(i)
-                    zij = round(getvalue(z[i, j]))
-                    if (zij > 0)
-                        out_z[j, i] = zij
-                        # println("z[$i, $j]: $(zij) | d($i, $j): ")
+                    z_ij = round(getvalue(z[i, j]))
+                    if (z_ij > 0)
+                        out_z[j, i] = z_ij
+                        # println("z[$i, $j]: $(z_ij) | d($i, $j): ")
                     end
                 end
             end
@@ -63,9 +62,8 @@ function solve_glcip(data::DataGlcip, input_file, app)
             y = variables[:y]
             for i in data.nodes
                 for p in data.min_incentives[i]
-                    temp = getvalue(y[i, p])
-                    yip = round(temp)
-                    if (yip > 0)
+                    y_ip = round(getvalue(y[i, p]))
+                    if (y_ip > 0)
                         if p > 1
                             out_y[i] = p
                             # println("y[$i, $p]: $(W[(i,p)]) | $(INCENTIVES[p])")

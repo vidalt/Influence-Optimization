@@ -35,7 +35,6 @@ function run_glcip(app, input_file)
         @info("<== CF ==>")
 
         app[command]["cuts"] = "cover_cut2"
-        # app[command]["step2"] = true
     end
 
     solution = solve_glcip(data, input_file, app)
@@ -58,12 +57,11 @@ function run(app::Dict{String,Any})
         p = Progress(length(dir_files), 1)
         for (i, filename) in enumerate(dir_files)
             input_file = joinpath(app["filepath"], filename)
-            @show input_file
+            @info(input_file)
 
             sol = run_glcip(app, input_file)
 
-            row = [sol.instance, sol.objective, sol.status, sol.time]
-
+            # row = [sol.instance, sol.objective, sol.status, sol.time]
             # # TODO: filename as a parameter?
             # open("models_track.csv","a") do fp
             #     println(fp, join(row, ", "))
@@ -82,7 +80,7 @@ function run(app::Dict{String,Any})
         output_solution_dir = joinpath(appfolder, "..", "out")
         mkpath(output_solution_dir)
 
-        # Export solution outpu
+        # Export solution output
         output_solution_path = joinpath(output_solution_dir, base_filename)
         export_solution(sol, output_solution_path)
 
@@ -110,30 +108,15 @@ end
 
 if isempty(ARGS)
     # main(["--help)
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i3", "bc", "-a", "0.1",  "-u", "60"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i3", "bc", "-a", "0.1", "-c", "cover_cut2", "-u", "17"])
-    # main(["data/instances2/SW-n10-k4-b0.1-d1.0-10.0-g0.7-i1", "bc", "-a", "0.1", "-c", "generalized_cut", "-u", "60"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i1", "bc", "-a", "0.1", "-c", "cover_cut2", "-u", "55"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i2", "bc", "-a", "0.1", "-c", "cover_cut2", "-u", "41"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i1", "bc", "-a", "1.0", "-c", "cover_cut2", "-u", "97"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.3-d1-10-g0.7-i2", "bc", "-a", "0.1", "-c", "cover_cut2", "-u", "45"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i4", "-l", "bc", "-a", "0.1", "-c", "cover_cut2", "-g", "0.9"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "bc", "-c", "cover_cut2", "-a", "0.5", "-g", "0.9", "-r", "200"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i3", "-l", "bc", "-c", "cover_cut2", "-a", "1.0", "-g", "1.1", "-r", "200"])
-    # main(["data/socnet-instances-v2/SW-n75-k12-b0.3-d1-10-g0.7-i2", "-l", "bc", "-c", "cover_cut2", "-a", "0.1", "-g", "0.9", "-r", "200"])
-    # main(["data/socnet-instances-v2/SW-n75-k12-b0.3-d1-10-g0.7-i2", "bc", "-a", "0.1", "-c", "cover_cut2", "-g", "0.9", "-u", "153"])
-    # main(["data/socnet-instances-v2/SW-n100-k16-b0.1-d1-10-g0.7-i1", "bc", "-a", "0.1", "-c", "cover_cut2", "-u", "213"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "icc", "-c", "cover_cut2", "-a", "0.1", "-g", "1.0", "-r", "2000"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i2", "-l", "bc", "-a", "0.1", "-g", "0.9", "-r", "200"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.3-d1-10-g0.7-i1", "bc", "-a", "1.0", "-g", "0.9", "-c", "cover_cut2", "-u", "368"])
-    # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "bc", "-a", "0.1", "-g", "0.9"])
-    # main(["GLCIP/src/notebooks/Grafo_GLCIP_Exemplo_Dissertacao", "-l", "bc", "-a", "0.1", "-c", "cover_cut"])
 
     # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-a", "0.1", "-g", "1.0", "icc", "-r", "2000"])
     # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "cf"])
-    main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i5", "-a", "0.1", "cf"])
+    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i5", "-a", "0.1", "-u", "59",  "cf"]) # 58
+    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i2", "-a", "0.5", "-u", "51", cf"]) # 50
+    main(["data/socnet-instances-v2/SW-n50-k8-b0.3-d1-10-g0.7-i1", "-a", "0.1", "-u", "45", "cf"]) # 44
+    # main(["data/socnet-instances-v2/SW-n75-k8-b0.1-d1-10-g0.7-i5", "-a", "1.0", "-u", "122", "cf"]) # 
 
-    # arg_string = "data/socnet-instances-v2/SW-n50-k4-b0.3-d1-10-g0.7-i1 bc -a 0.5 -u 60"
+    # arg_string = "data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1 -a 0.1 -g 1.0 icc -r 2000"
     # main(split(arg_string))
 else
     main(ARGS)

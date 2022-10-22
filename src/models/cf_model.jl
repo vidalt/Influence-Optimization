@@ -53,7 +53,7 @@ function cf_model(data::DataGlcip, app)
       end
 
       nonactivated = Set([i for i in data.nodes if resistence[i] > 0])
-      activated = [i for i in data.nodes if !(i in nonactivated)]
+      # activated = [i for i in data.nodes if !(i in nonactivated)]
 
       if length(data.nodes) - length(nonactivated) >= ceil(app["alpha"] * (length(data.nodes) - 0.000001))
          # cost = sum(W[(i, p_[i])] for i in data.nodes)
@@ -74,7 +74,6 @@ function cf_model(data::DataGlcip, app)
       CPX_PARAM_SCRIND=verbose))
 
    @variables(model, begin
-      0 <= x[i in data.nodes] <= 1
       y[i in data.nodes, p in P(i)], Bin
    end)
 
@@ -110,129 +109,98 @@ function cf_model(data::DataGlcip, app)
          end
       end
 
-      is_x_k = false
+      num_cuts = 0
+      status = :Undefined
 
       is_frac = (count([(_y_(i, p) > 0.001 && _y_(i, p) < 0.999)
                         for i in data.nodes for p in P(i)]) > 0)
 
-      num_cuts = 0
-      status = :Undefined
+      if is_frac
+         # Build and solve the separation MIP
+         sep = Model(
+            solver=CplexSolver(CPX_PARAM_THREADS=params_cplex[:threads],
+                                 CPX_PARAM_CUTUP=1.0,
+                                 CPX_PARAM_TILIM=(is_cut ? 0.2 : 7200.0), 
+                                 CPX_PARAM_MIPDISPLAY=0, 
+                                 CPX_PARAM_SCRIND=0
+         ))
 
-      if is_x_k
-         V_set = filter(x_k -> getvalue(x[x_k]) > params_icc[:cut_tolerance], data.nodes)
+         @variables(sep, begin
+            s0[j in data.nodes], Bin 
+            s1[j in data.nodes], Bin 
+            y1[i in data.nodes, p in P(i)], Bin
+            y0[i in data.nodes, p in P(i)], Bin
+         end)
+
+         @objective(sep, Min, sum(_y_(i, p) * y1[i, p] for i in data.nodes, p in P(i)))
+
+         @constraints(sep, begin
+            cover[i in data.nodes], sum(incentive_gamma(i, p) * y0[i, p] for p in P(i)) +
+                                    sum(d(i, j) * s0[j] for j in N(i)) +
+                                    sum(d(i, j) for j in N(i)) * s1[i] <=
+                                    sum(d(i, j) for j in N(i)) + ceil(h_gamma(i)) - 1
+            forcing_s0[j in data.nodes], s0[j] >= 1 - s1[j]
+            forcing_y1[i in data.nodes, p in P(i)], y1[i, p] >= s1[i] -
+                                                                  sum(y0[i, q] for q in P(i) if q >= p)
+            separation_x, sum(s1) >= floor((1.0 - app["alpha"]) * (length(data.nodes) + 0.000001)) + 1.0 # |X| >= floor( (1 - alpha) |V|) + 1
+         end)
+
+         status = solve(sep, suppress_warnings=true)
+
+         # check the violation
+         lhs_val = getobjectivevalue(sep)
       else
-         V_set = [1]
+         X = getNonactivated(
+            [p for i in data.nodes for p in P(i) if _y_(i, p) > 0.999])
+         lhs_val = isempty(X) ? 1.0 : 0.0
       end
 
-      for k in V_set
-         x_k = getvalue(x[k])
+      rhs_val = 1.0
 
+      if (lhs_val < rhs_val - params_icc[:cut_tolerance])
+         # compute the cut coefficients to be lifted (their coefficients set to zero)
          if is_frac
-            # Build and solve the separation MIP
-            sep = Model(
-               solver=CplexSolver(CPX_PARAM_THREADS=params_cplex[:threads],
-                                  CPX_PARAM_CUTUP=is_x_k ? x_k : 1.0,
-                                  CPX_PARAM_TILIM=(is_cut ? 0.2 : 7200.0), 
-                                  CPX_PARAM_MIPDISPLAY=0, 
-                                  CPX_PARAM_SCRIND=0
-            ))
+            X = Set([i for i in data.nodes if getvalue(s1[i]) > 0.999])
+         end
+         _X_ = [i for i in data.nodes if !(i in X)]
 
-            @variables(sep, begin
-               s0[j in data.nodes], Bin # x1 => s0
-               s1[j in data.nodes], Bin # s => s1
-               y1[i in data.nodes, p in P(i)], Bin
-               y0[i in data.nodes, p in P(i)], Bin
-            end)
+         #lifted_x = [j for j in data.nodes if !(j in X) && getvalue(x0[j]) < 0.001]
+         lifted_x = Int[]
 
-            @objective(sep, Min, sum(_y_(i, p) * y1[i, p] for i in data.nodes, p in P(i)))
+         lifted_y = [
+            [p for p in P(i) if ((p == 1) || ((i in X) && (incentive_gamma(i, p) +
+                                          (isempty(_X_) ? 0 : sum(d(i, j) for j in _X_))
+                                          <= ceil(h_gamma(i)) - 1)))]
+            for i in data.nodes
+         ]
 
-            @constraints(sep, begin
-               cover[i in data.nodes], sum(incentive_gamma(i, p) * y0[i, p] for p in P(i)) +
-                                       #sum(d(i,j)*x0[j] for j in N(i)) +
-                                       sum(d(i, j) * s0[j] for j in N(i)) +
-                                       sum(d(i, j) for j in N(i)) * s1[i] <=
-                                       sum(d(i, j) for j in N(i)) + ceil(h_gamma(i)) - 1
-               forcing_s0[j in data.nodes], s0[j] >= 1 - s1[j]
-               forcing_y1[i in data.nodes, p in P(i)], y1[i, p] >= s1[i] -
-                                                                   sum(y0[i, q] for q in P(i) if q >= p)
-            end)
-            
-            # |X| >= floor( (1 - alpha) |V|) + 1
-            if !is_x_k
-               @constraint(sep, separation_x, sum(s1) >= floor((1.0 - app["alpha"]) * (length(data.nodes) + 0.000001)) + 1.0)
-            else
-               @constraint(sep, forcing_sk, s1[k] == 1)
-            end
+         lhs_x = [j for j in lifted_x]
 
-            status = solve(sep, suppress_warnings=true)
- 
-            # check the violation
-            lhs_val = getobjectivevalue(sep)
+         lhs_y = [(i, p) for i in X for p in P(i) if !(p in lifted_y[i])]
+
+         if isempty(lhs_y)
+            lhs = sum(x[j] for j in lhs_x)
+         elseif isempty(lhs_x)
+            lhs = sum(y[i, p] for (i, p) in lhs_y)
          else
-            X = getNonactivated(
-               [p for i in data.nodes for p in P(i) if _y_(i, p) > 0.999])
-            lhs_val = isempty(X) ? 1.0 : 0.0
+            lhs = sum(y[i, p] for (i, p) in lhs_y) + sum(x[j] for j in lhs_x)
          end
 
-         rhs = is_x_k ? x_k : 1.0
+         num_cuts += 1
 
-         if (lhs_val < rhs - params_icc[:cut_tolerance])
-            # compute the cut coefficients to be lifted (their coefficients set to zero)
-            if is_frac
-               X = Set([i for i in data.nodes if getvalue(s1[i]) > 0.999])
-            end
-            _X_ = [i for i in data.nodes if !(i in X)]
+         # Add to the model
+         rhs = 1.0
+         if typeof(cb) == Model
+            @constraint(cb, lhs >= rhs)
 
-            #lifted_x = [j for j in data.nodes if !(j in X) && getvalue(x0[j]) < 0.001]
-            lifted_x = Int[]
-
-            lifted_y = [
-               [p for p in P(i) if ((p == 1) || ((i in X) && (incentive_gamma(i, p) +
-                                           (isempty(_X_) ? 0 : sum(d(i, j) for j in _X_))
-                                           <= ceil(h_gamma(i)) - 1)))]
-               for i in data.nodes
-            ]
-
-            lhs_x = [j for j in lifted_x]
-
-            lhs_y = [(i, p) for i in X for p in P(i) if !(p in lifted_y[i])]
-
-            if isempty(lhs_y)
-               lhs = sum(x[j] for j in lhs_x)
-            elseif isempty(lhs_x)
-               lhs = sum(y[i, p] for (i, p) in lhs_y)
+            status = solve(cb)
+         else
+            if is_cut
+               @usercut(cb, lhs >= rhs)
             else
-               lhs = sum(y[i, p] for (i, p) in lhs_y) + sum(x[j] for j in lhs_x)
+               @lazyconstraint(cb, lhs >= 1.0)
             end
-
-            num_cuts += 1
-
-            if typeof(cb) == Model
-               if is_x_k
-                  @constraint(cb, lhs >= x[k])
-               else
-                  @constraint(cb, lhs >= 1.0)
-               end
-               status = solve(cb)
-            else
-               if is_cut
-                  if is_x_k
-                     @usercut(cb, lhs >= x[k])
-                  else
-                     @usercut(cb, lhs >= 1.0)
-                  end
-               else
-                  if is_x_k
-                     @lazyconstraint(cb, lhs >= x[k])
-                  else
-                     @lazyconstraint(cb, lhs >= 1.0)
-                  end
-               end
-            end
-
          end
-
-         (!is_x_k) && break
       end
 
       return num_cuts
