@@ -49,53 +49,55 @@ function run(app::Dict{String,Any})
     end
     flush(stdout)
 
-    if app["batch"]
-        # dir_files = readdir(app["filepath"])
-        dir_files = filter(x->occursin("SW", x), readdir(app["filepath"]))
+    # # DEPRECATED
+    # if haskey(app, "batch")
+    #     # dir_files = readdir(app["filepath"])
+    #     dir_files = filter(x->occursin("SW", x), readdir(app["filepath"]))
 
-        # Iterate over files
-        p = Progress(length(dir_files), 1)
-        for (i, filename) in enumerate(dir_files)
-            input_file = joinpath(app["filepath"], filename)
-            @info(input_file)
+    #     # Iterate over files
+    #     p = Progress(length(dir_files), 1)
+    #     for (i, filename) in enumerate(dir_files)
+    #         input_file = joinpath(app["filepath"], filename)
+    #         @info(input_file)
 
-            sol = run_glcip(app, input_file)
+    #         sol = run_glcip(app, input_file)
 
-            # row = [sol.instance, sol.objective, sol.status, sol.time]
-            # # TODO: filename as a parameter?
-            # open("models_track.csv","a") do fp
-            #     println(fp, join(row, ", "))
-            # end
+    #         # row = [sol.instance, sol.objective, sol.status, sol.time]
+    #         # # TODO: filename as a parameter?
+    #         # open("models_track.csv","a") do fp
+    #         #     println(fp, join(row, ", "))
+    #         # end
 
-            update!(p, i)
-        end
-    else
-        sol = run_glcip(app, app["filepath"])
+    #         update!(p, i)
+    #     end
+    # else
+    # end
 
-        # Output 
-        println(sol)
+    sol = run_glcip(app, app["filepath"])
 
-        base_filename = "$(basename("$(app["filepath"])"))-a$(sol.alpha)-g$(app["gamma"])-$(app["%COMMAND%"])"
+    # Output 
+    println(sol)
 
-        output_solution_dir = joinpath(appfolder, "..", "out")
-        mkpath(output_solution_dir)
+    base_filename = "$(basename("$(app["filepath"])"))-a$(sol.alpha)-g$(app["gamma"])-$(app["%COMMAND%"])"
 
-        # Export solution output
-        output_solution_path = joinpath(output_solution_dir, base_filename)
-        export_solution(sol, output_solution_path)
+    output_solution_dir = joinpath(appfolder, "..", "out")
+    mkpath(output_solution_dir)
 
-        # Export a graph representation of the solution
-        if app["latex"]
-            output_latex_dir = joinpath(output_solution_dir, "latex")
-            mkpath(output_latex_dir)
+    # Export solution output
+    output_solution_path = joinpath(output_solution_dir, base_filename)
+    export_solution(sol, output_solution_path)
 
-            output_latex_dir_gamma = joinpath(output_latex_dir, string(app["gamma"]))
-            mkpath(output_latex_dir_gamma)
+    # Export a graph representation of the solution
+    if app["latex"]
+        output_latex_dir = joinpath(output_solution_dir, "latex")
+        mkpath(output_latex_dir)
 
-            output_latex_path = joinpath(output_latex_dir_gamma, base_filename)
+        output_latex_dir_gamma = joinpath(output_latex_dir, string(app["gamma"]))
+        mkpath(output_latex_dir_gamma)
 
-            draw_solution(sol, output_latex_path)
-        end
+        output_latex_path = joinpath(output_latex_dir_gamma, base_filename)
+
+        draw_solution(sol, output_latex_path)
     end
 end
 

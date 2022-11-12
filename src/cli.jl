@@ -20,9 +20,9 @@ function parse_commandline(args::Array{String,1})
         "--verbose", "-v"
             help = "Verbose output"
             action = :store_true
-        "--batch", "-b"
-            help = "Batch"
-            action = :store_true
+        # "--batch", "-b"
+        #     help = "Batch"
+        #     action = :store_true
         "--latex", "-l"
             help = "Latex Output"
             action = :store_true
