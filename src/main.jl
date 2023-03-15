@@ -8,12 +8,13 @@ include("cli.jl")
 include("data.jl")
 include("models/params.jl")
 include("models/run.jl")
-include("solution.jl")
+include("models/solution.jl")
 
 appfolder = dirname(@__FILE__)
 
-function run_glcip(app, input_file)
-    data = read_glcip_data(input_file, get_incentives)
+function run_glcip(app::Dict{String,Any}, input_file::String)
+    instance_type = app["instance"]
+    data = read_glcip_data(input_file, instance_type)
 
     command = app["%COMMAND%"]
     if command == "icc"
@@ -76,7 +77,7 @@ function run(app::Dict{String,Any})
     sol = run_glcip(app, app["filepath"])
 
     # Output 
-    println(sol)
+    # println(sol)
 
     base_filename = "$(basename("$(app["filepath"])"))-a$(sol.alpha)-g$(app["gamma"])-$(app["%COMMAND%"])"
 
@@ -99,23 +100,33 @@ function run(app::Dict{String,Any})
 
         draw_solution(sol, output_latex_path)
     end
+
+    return sol
 end
 
-function main(args)
+function main(args::Vector{String})
     app = parse_commandline(args)
 
     app === nothing && return
-    run(app)
+    return run(app)
 end
 
 if isempty(ARGS)
-    # main(["--help)
+    # main(["--help"])
 
     # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-a", "0.1", "-g", "1.0", "icc", "-r", "2000"])
     # main(["data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1", "-l", "cf"])
-    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i5", "-a", "0.1", "-u", "59",  "cf"]) # 58
+    # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i5", "-i", "SW", "-a", "0.1", "-u", "59",  "cf"]) # 58
     # main(["data/socnet-instances-v2/SW-n50-k8-b0.1-d1-10-g0.7-i2", "-a", "0.5", "-u", "51", cf"]) # 50
-    main(["data/socnet-instances-v2/SW-n50-k8-b0.3-d1-10-g0.7-i1", "-a", "0.1", "-u", "45", "cf"]) # 44
+    # main(["data/socnet-instances-v2/SW-n50-k8-b0.3-d1-10-g0.7-i1", "-a", "0.1", "-u", "45", "cf"]) # 44
+    # main(["data/socnet-instances-v2/GRZ-n1000-k4-b0.3-d1-50-g0-i1", "-i", "GRZ", "-a", "1.0", "-u", "20", "cf"])
+    
+    # Errado: UB 4151, 4086, 4058, 4033, 4031, 3979, 3972, 3940, 3935, 3922, 3789
+    # main(["data/socnet-instances-v2/GRZ-n1000-k4-b0.3-d1-50-g0-i2", "-i", "GRZ", "-a", "1.0", "icc"]) # Best: 3136
+    # sol = main(["data/socnet-instances-v2/GRZ-n1000-k4-b0.3-d1-50-g0-i1", "-i", "GRZ", "-a", "1.0", "licc+"])
+    main(["GLCIP/data/play.txt", "-i", "GRZ", "-a", "1.0", "icc"]) 
+    # main(["data/play.txt", "-a", "1.0", "icc"]) 
+    # main(["data/socnet-instances-v2/GRZ-n50000-k4-b0.3-d1-50-g0-i1", "-a", "1.0", "cf"])
     # main(["data/socnet-instances-v2/SW-n75-k8-b0.1-d1-10-g0.7-i5", "-a", "1.0", "-u", "122", "cf"]) # 
 
     # arg_string = "data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i1 -a 0.1 -g 1.0 icc -r 2000"

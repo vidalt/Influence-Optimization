@@ -1,4 +1,4 @@
-function cf_model(data::DataGlcip, app)
+function cf_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_influences::Array{Array{Int,1},1})
    # Parameters
    command = app["%COMMAND%"]
    verbose = Int(app["verbose"]) | params_cplex[:scrind]
@@ -8,7 +8,8 @@ function cf_model(data::DataGlcip, app)
    INCENTIVES = data.incentives
 
    N = i_neighborhood(data)
-   P(i::Int) = data.min_incentives[i]
+   # P(i::Int) = data.min_incentives[i]
+   P(i::Int) = preprocessed_sum_influences[i]
    h(i::Int) = data.hurdle[i] .- 0.5
    d(i::Int, j::Int) = influence(data, j, i)
    h_gamma(i::Int) = h(i)^(1 / app["gamma"])
@@ -28,6 +29,7 @@ function cf_model(data::DataGlcip, app)
       return ceil(h_gamma(i)) - ceil(h_minus_p(i, p))
    end
 
+   #TODO: inicializa vetor resitence e act/new_act com contador
    function getNonactivated(p_)
       # start with all individuals in X and no influence
       resistence = [max(0, Int(ceil(h_gamma(i)) - incentive_gamma(i, p_[i]))) for i in data.nodes]
@@ -52,6 +54,7 @@ function cf_model(data::DataGlcip, app)
          end
       end
 
+      # TODO; clear + push 
       nonactivated = Set([i for i in data.nodes if resistence[i] > 0])
       # activated = [i for i in data.nodes if !(i in nonactivated)]
 
@@ -70,9 +73,10 @@ function cf_model(data::DataGlcip, app)
       #CPX_PARAM_CUTPASS=-1,
       CPX_PARAM_TILIM=params_cplex[:time_limit],
       CPX_PARAM_MIPDISPLAY=params_cplex[:mip_display],
-      #CPX_PARAM_MIPINTERVAL=params_cplex[:mip_interval],
-      CPX_PARAM_SCRIND=verbose))
-
+      CPX_PARAM_MIPINTERVAL=params_cplex[:mip_interval],
+      CPX_PARAM_SCRIND=verbose,
+      CPX_PARAM_HEURFREQ=-1))
+   
    @variables(model, begin
       y[i in data.nodes, p in P(i)], Bin
    end)
@@ -100,12 +104,13 @@ function cf_model(data::DataGlcip, app)
          currobj = cbgetnodeobjval(cb)
          if abs(currobj - prevobj) < 1e-4
             countobj += 1
-            if countobj >= 100
-               return 0
-            end
          else
             prevobj = currobj
-            countobj = 0
+            # countobj = 0
+         end
+
+         if countobj >= 100
+            return 0
          end
       end
 
@@ -115,6 +120,7 @@ function cf_model(data::DataGlcip, app)
       is_frac = (count([(_y_(i, p) > 0.001 && _y_(i, p) < 0.999)
                         for i in data.nodes for p in P(i)]) > 0)
 
+      # @show is_frac
       if is_frac
          # Build and solve the separation MIP
          sep = Model(
@@ -164,9 +170,6 @@ function cf_model(data::DataGlcip, app)
          end
          _X_ = [i for i in data.nodes if !(i in X)]
 
-         #lifted_x = [j for j in data.nodes if !(j in X) && getvalue(x0[j]) < 0.001]
-         lifted_x = Int[]
-
          lifted_y = [
             [p for p in P(i) if ((p == 1) || ((i in X) && (incentive_gamma(i, p) +
                                           (isempty(_X_) ? 0 : sum(d(i, j) for j in _X_))
@@ -174,33 +177,31 @@ function cf_model(data::DataGlcip, app)
             for i in data.nodes
          ]
 
-         lhs_x = [j for j in lifted_x]
-
          lhs_y = [(i, p) for i in X for p in P(i) if !(p in lifted_y[i])]
 
-         if isempty(lhs_y)
-            lhs = sum(x[j] for j in lhs_x)
-         elseif isempty(lhs_x)
+         if !isempty(lhs_y)
+            # @info("Corte")
             lhs = sum(y[i, p] for (i, p) in lhs_y)
-         else
-            lhs = sum(y[i, p] for (i, p) in lhs_y) + sum(x[j] for j in lhs_x)
-         end
 
-         num_cuts += 1
+            num_cuts += 1
 
-         # Add to the model
-         rhs = 1.0
-         if typeof(cb) == Model
-            @constraint(cb, lhs >= rhs)
+            # Add to the model
+            rhs = 1.0
+            if typeof(cb) == Model
+               @constraint(cb, lhs >= rhs)
 
-            status = solve(cb)
-         else
-            if is_cut
-               @usercut(cb, lhs >= rhs)
+               status = solve(cb)
             else
-               @lazyconstraint(cb, lhs >= 1.0)
+               if is_cut
+                  @usercut(cb, lhs >= rhs)
+               else
+                  @lazyconstraint(cb, lhs >= 1.0)
+               end
             end
          end
+      elseif is_frac # Sem cortes
+         countobj = 100 # para
+         @info ("STOP") 
       end
 
       return num_cuts

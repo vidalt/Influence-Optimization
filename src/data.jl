@@ -1,6 +1,6 @@
 # import Base.show, Base.print
 
-struct DataGlcip
+mutable struct DataGlcip
     nodes::UnitRange{Int}
     k::Int
     beta::Float64
@@ -30,7 +30,7 @@ struct DataGlcip
     end
 end
 
-function create_graph(n, influence)
+function create_graph(n::Int, influence::Matrix{Int})
     # Input Graph
     graph = SimpleDiGraph(n)
     for i in 1:n
@@ -44,11 +44,29 @@ function create_graph(n, influence)
     return graph
 end
 
-function get_incentives(H)
+function get_incentives_sw(H::Int)
     return [0, 0.25H, 0.5H, 0.75H, H]
 end
 
-function read_glcip_data(filename::String, get_incentives::Function)
+function get_incentives_grz(H::Int)
+    return [Float64(h) for h in 0:H]
+end
+
+function get_instance_type_incentives_and_costs(instance_type::String, n_vertex::Int, H::Int)
+    # incentives in P_i are integers obtained by rounding up the frac. values
+
+    if instance_type == "SW"
+        P = ceil.(get_incentives_sw(H))
+        W_ip = Dict((i,p) => trunc(P[p]^0.9) for i in 1:n_vertex for p in eachindex(P))
+    elseif instance_type == "GRZ"
+        P = ceil.(get_incentives_grz(H))
+        W_ip = Dict((i,p) => P[p] for i in 1:n_vertex for p in eachindex(P))
+    end
+
+    return (P, W_ip)
+end
+
+function read_glcip_data(filename::String, instance_type::String)
     data = Vector{Float64}(undef, 0)
 
     headers = []
@@ -90,15 +108,15 @@ function read_glcip_data(filename::String, get_incentives::Function)
         H = parse(Int, headers[8])
     end
 
-    # incentives in P_i are integers obtained by rounding up the frac. values
-    P = ceil.(get_incentives(H))
+    @show H, sum(hurdle)/length(hurdle)
 
-    W_ip = Dict((i,p) => trunc(P[p]^0.9) for i in 1:n_vertex for p in 1:length(P))
+    # incentives in P_i are integers obtained by rounding up the frac. values
+    (P, W_ip) = get_instance_type_incentives_and_costs(instance_type, n_vertex, H)
 
     # Preprocessing step to compute the cheapest incentive $p$ that is
     # sufficient to activate a node without receiving influence from its neighbors
     minimum_incentive(i::Int) = minimum(filter(p-> P[p] >= hurdle[i], 1:length(P)))
-    cheapest_incentives(i) = 1:length(filter(p->W_ip[i,p] <= W_ip[i, minimum_incentive(i)], 1:length(P)))
+    cheapest_incentives(i::Int) = 1:length(filter(p->W_ip[i,p] <= W_ip[i, minimum_incentive(i)], 1:length(P)))
 
     P_i = cheapest_incentives.(1:n_vertex)
     data_glcip = DataGlcip(headers_data[1:7]..., hurdle, H, influence, W_ip, P_i, P)

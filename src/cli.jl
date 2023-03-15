@@ -6,7 +6,7 @@ function choices(list)
     end
 end
 
-function parse_commandline(args::Array{String,1})
+function parse_commandline(args::Vector{String})
     # usage = "GLCIP executable \n" *
     #             "  On interactive mode, call main([\"arg1\", ..., \"argn\"])",
     s = ArgParseSettings()
@@ -40,6 +40,11 @@ function parse_commandline(args::Array{String,1})
             range_tester = (x -> x in gamma_list)
             arg_type = Float64
             default = params[:gamma]
+        "--instance", "-i"
+            help = "Instance format: `SW` | `GRZ`"
+            range_tester = (x -> x in ["SW", "GRZ"])
+            arg_type = String
+            default = "SW"
         "filepath"
             help = "Instance file path or path directory"
             default = "/data/socnet-instances-v2/SW-n50-k4-b0.1-d1-10-g0.7-i3"
