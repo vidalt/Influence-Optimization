@@ -20,6 +20,12 @@ function parse_commandline(args::Vector{String})
         "--verbose", "-v"
             help = "Verbose output"
             action = :store_true
+        "--export-lp"
+            help = "Flag to enable export lp"
+            action = :store_true
+        "--export-cplex-log"
+            help = "Flag to enable export cplex log"
+            action = :store_true
         # "--batch", "-b"
         #     help = "Batch"
         #     action = :store_true
@@ -73,6 +79,10 @@ function parse_commandline(args::Vector{String})
             help = "Cover-Cut max time (s)"
             arg_type = Int
             default = params_icc[:cut_rounds_max_time]
+        "--pre_add_cycles_up_to_length"
+            help = "Pre add cycle cuts up to length"
+            arg_type = Int
+            default = params_icc[:pre_add_cycles_up_to_length]
     end
 
     @add_arg_table! s["icc+"] begin
@@ -80,10 +90,18 @@ function parse_commandline(args::Vector{String})
             help = "Cover-Cut rounds"
             arg_type = Int
             default = params_icc[:cut_rounds_init]
+        "--pre_add_cycles_up_to_length"
+            help = "Pre add cycle cuts up to length"
+            arg_type = Int
+            default = params_icc[:pre_add_cycles_up_to_length]
     end
 
-    # @add_arg_table! s["licc+"] begin
-    # end
+    @add_arg_table! s["licc+"] begin
+        "--pre_add_cycles_up_to_length"
+            help = "Pre add cycle cuts up to length"
+            arg_type = Int
+            default = params_icc[:pre_add_cycles_up_to_length]
+    end
 
     # @add_arg_table! s["cf"] begin
     # end

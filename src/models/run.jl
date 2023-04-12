@@ -82,18 +82,22 @@ function build_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_in
 end
 
 function solve_glcip(data::DataGlcip, input_file::String, app::Dict{String,Any})
+    @info("Run GLCIP")
     N = i_neighborhood(data)
     d(i::Int, j::Int) = influence(data, j, i)
     h(i::Int) = data.hurdle[i] .- 0.5
     # P(i::Int) = data.min_incentives[i]
     infls(i::Int) = [d(i,j) for j in N(i)]
 
-    preprocessed_sum_influences = [preprocess_incentives(data, i) for i in data.nodes]
     # P(i::Int) = preprocessed_sum_influences[i]
+    preprocessed_sum_influences = [preprocess_incentives(data, i) for i in data.nodes]
+    @info("Incentives preprocessed")
 
     (model, variables, P, W) = build_model(data, app, preprocessed_sum_influences)
-    status = solve(model)
+    @info("Model builded")
 
+    status = solve(model)
+    
     # Output
     out_x = zeros(Int, length(data.nodes))
     out_y = zeros(Int, length(data.nodes))

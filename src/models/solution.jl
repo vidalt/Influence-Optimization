@@ -32,7 +32,7 @@ struct BCSolution <: Solution
     )
         actives = filter(i -> i == 1, x)
 
-        graph = create_graph(x, y, z)
+        graph = create_graph(x, z)
 
         new(
             data,
@@ -52,7 +52,7 @@ struct BCSolution <: Solution
     end
 end
 
-function create_graph(x, y, z)
+function create_graph(x, z)
     graph = SimpleDiGraph(length(x))
 
     # Edges
@@ -80,13 +80,14 @@ function check_feasibility(sol::Solution)
     N = i_neighborhood(sol.data)
     d(i::Int, j::Int) = influence(sol.data, j, i)
     h(i::Int) = sol.data.hurdle[i]
+    W = sol.data.weights
 
     # Check for all nodes
     actives = 0
     for (i, x) in enumerate(sol.x)
         influences = []
         for j in N(i)
-            if sol.z[i, j] <= x
+            if sol.z[j, i] <= x
                 influence = d(i,j)
                 push!(influences, influence)
             else
@@ -114,7 +115,7 @@ function check_feasibility(sol::Solution)
         return false,  "Number of active nodes < alpha |V|"
     end
 
-    test_cost = sum(INCENTIVES[p] for (i, p) in enumerate(sol.y))
+    test_cost = sum(W[(i,p)] for (i, p) in enumerate(sol.y))
 
     if sol.objective != test_cost
         return false, "Wrong cost"
@@ -212,6 +213,7 @@ function read_solution(filename::String)
 
         out_x = Vector{Int}()
         dict_y = Dict()
+        dict_W = Dict()
         dict_z = Dict()
 
         # Extract data from file
@@ -268,17 +270,20 @@ function read_solution(filename::String)
                 if match_y !== nothing
                     y_indices = split(match_y[1], ",")
                     i = parse(Int, strip(y_indices[1]))
-                    p = parse(Int, strip(y_indices[2]))
+                    # p = parse(Int, strip(y_indices[2]))
 
-                    if sol.app["instance"] == "SW"
-                        dict_y[i] = p
-                    elseif sol.app["instance"] == "GRZ"
-                        temp = split(line, " | ")
-                        regex_W = r"W\[(\d+(?:, \d+)*)\] *= *((?:\d|\.)+)$"
-                        match_W = match(regex_W, line)
-                        if match_y !== nothing
-                            dict_y[i] = parse(Float64, strip(match_W[2])) + 1
-                        end
+                    temp = split(line, " | ")
+
+                    regex_p = r"P\[(\d+)\] *= *((?:\d|\.)+)"
+                    match_p = match(regex_p, line)
+                    if match_p !== nothing
+                        dict_y[i] = parse(Int, strip(match_p[1])) 
+                    end
+
+                    regex_W = r"W\[(\d+(?:, \d+)*)\] *= *((?:\d|\.)+)$"
+                    match_W = match(regex_W, line)
+                    if match_W !== nothing
+                        dict_W[i] = parse(Float64, strip(match_W[2])) + 1
                     end
                 end
             end
@@ -309,13 +314,18 @@ function read_solution(filename::String)
         out_z = zeros(Int, length(data.nodes), length(data.nodes))
         for (key, value) in dict_z
             i,j = key
-            out_z[j, i] = value
+            # out_z[j, i] = value
+            out_z[i, j] = value
         end
 
         # Create list of incentives `y_ip` (∀i in V, p in P(i))
         out_y = ones(Int, length(data.nodes))
         for (i, p) in dict_y
-            out_y[i] = p
+            if app["instance"] == "SW"
+                out_y[i] = p
+            else
+                out_y[i] = dict_W[i]
+            end
         end
 
         # Create `solution` structure

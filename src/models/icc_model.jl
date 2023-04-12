@@ -1,5 +1,16 @@
+# Create a TimerOutput, this is the main type that keeps track of everything.
+const to = TimerOutput()
+
+function sliding_window(arr::Vector{Int})
+   paths = []
+   for (i, j) in zip(arr, arr[2:end])
+      push!(paths, (i,j))
+   end
+
+   return paths
+end
+
 function preprocess_instance(data::DataGlcip)
-   # @info " == BEGIN PREPROCESS =="
    N = i_neighborhood(data)
    h(i::Int) = data.hurdle[i]
    d(i::Int, j::Int) = influence(data, j, i)
@@ -22,11 +33,6 @@ function preprocess_instance(data::DataGlcip)
          W_ip[(i, v+1)] = temp < 0 ? h(i) : temp
       end
 
-      # @info "i:$i | h($i): $(h(i)) | d_ji: $influence"
-      # for p in P_i
-      #    @info "W[$i, $p]: $(W_ip[(i,p)])"
-      # end
-       
       push!(incentives, P_i)
    end
 
@@ -34,17 +40,13 @@ function preprocess_instance(data::DataGlcip)
    d_new(i::Int, j::Int) = 1
    h_new(i::Int) = incentives[i][end] - 1
 
-   # @show h_new.(data.nodes)
-
-   # @info raw" == END PREPROCESS =="
-
    return P_new, W_ip, d_new, h_new
 end
+
 
 function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_influences::Array{Array{Int,1},1})
    # Parameters
    command = app["%COMMAND%"]
-   verbose = Int(app["verbose"]) | params_cplex[:scrind]
 
    has_step2 = app[command]["step2"]
  
@@ -54,14 +56,16 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
 
    N = i_neighborhood(data)
 
-   P, W, d, h = preprocess_instance(data)
-   data.weights = W
-
-   # P(i::Int) = data.min_incentives[i]
-   # P(i::Int) = preprocessed_sum_influences[i]
-   # W = data.weights
-   # d(i::Int, j::Int) = influence(data, j, i)
-   # h(i::Int) = data.hurdle[i] .- 0.5
+   if app["instance"] == "GRZ"
+      P, W, d, h = preprocess_instance(data)
+      data.weights = W
+   else
+      P(i::Int) = data.min_incentives[i]
+      P(i::Int) = preprocessed_sum_influences[i]
+      W = data.weights
+      d(i::Int, j::Int) = influence(data, j, i)
+      h(i::Int) = data.hurdle[i] .- 0.5
+   end
    
    h_gamma(i::Int) = h(i)^(1 / app["gamma"])
    
@@ -83,7 +87,7 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
       CPX_PARAM_TILIM=params_cplex[:time_limit],
       CPX_PARAM_MIPDISPLAY=params_cplex[:mip_display],
       CPX_PARAM_MIPINTERVAL=params_cplex[:mip_interval],
-      CPX_PARAM_SCRIND=verbose)
+      CPX_PARAM_SCRIND=params_cplex[:scrind])
    )
 
    @variables(model, begin
@@ -104,7 +108,101 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
       coverage, sum(x) >= ceil(app["alpha"] * (length(data.nodes) - 0.000001))
    end)
 
+   function pre_add_cycles_constraints_up_to_length(limit_length::Int=4)
+      histogram_cycles = zeros(Int, limit_length)
+   
+      @info("BEGIN - add all cycle elimination constraints (1d) for all cycles up to length four")
+      
+      p = Progress(length(data.nodes); showspeed=true, enabled=app["verbose"])
+      for i in data.nodes
+         pre_add_cycles_constraints_node_i_up_to_length!(1, limit_length, [i], histogram_cycles, i, i)
+         next!(p)
+      end
+   
+      @info("END - add all cycle elimination constraints (1d) for all cycles up to length four")
+   
+      for (i,v) in enumerate(histogram_cycles)
+         @info("Cycles length[$i]: $v")
+      end
+   end
+   
+   function pre_add_cycles_constraints_node_i_up_to_length!(cur_length::Int, limit_length::Int, arr::Vector{Int}, histogram_cycles::Vector{Int}, i::Int, j::Int)
+      if cur_length <= limit_length
+         for j_i in N(j)
+            arr_j = [arr; j_i]
+            if influence(data, i, j_i) > 0
+               path = sliding_window(arr_j)
+               
+               lhs = append!([z[e...] for e in path], [z[j_i, i]])
+               rhs = [x[e[1]] for e in path]
+               
+               @constraint(model, sum(lhs) <= sum(rhs))
+               
+               histogram_cycles[cur_length] += 1
+            end
+      
+            cur_length <= limit_length && pre_add_cycles_constraints_node_i_up_to_length!(cur_length+1, limit_length, arr_j, histogram_cycles, i, j_i)
+         end
+      end
+   end
+
+   # Generalized cycle elimination constraints (1d) for all cycles up to length four are added a priori to the model
+   pre_add_cycles_constraints_up_to_length(app[command]["pre_add_cycles_up_to_length"])
+
+   stop_cycle_cut = false
+   cycle_cut_init_time = time()
+
+   function simple_cycle_elimination_lazy_constraint(cb)
+      z_val = zeros(Int, length(data.nodes), length(data.nodes))
+
+      for i in data.nodes
+         for j in N(i)
+            z_ij = getvalue(z[i, j])
+            z_val[i, j] = round(Int, z_ij)
+         end
+      end
+
+      num_cuts = 0
+
+      NUM_NODES = length(data.nodes)
+      graph = create_graph(NUM_NODES, z_val)
+      cycles = simplecycles_iter(graph, 1000)
+
+      for cycle in cycles
+         i = cycle[1]
+         j = cycle[end]
+
+         if influence(data, i, j) > 0
+            path = sliding_window(cycle)
+
+            lhs = append!([z[e...] for e in path], [z[j, i]])
+            rhs = [x[e[1]] for e in path]
+
+            coefs = vcat([1.0 for i in lhs], [-1.0 for i in rhs])
+            vars = vcat(lhs, rhs)
+            vars_value = getvalue.(vars)
+
+            if (sum(coefs .* vars_value) > 0 + params_icc[:cut_tolerance])
+               num_cuts += 1
+               @lazyconstraint(cb, sum(lhs) <= sum(rhs))
+               print(".")
+            end
+         end
+      end
+
+      return num_cuts
+   end
+
    function cycle_elimination_cut(cb; is_cut=false)
+      ub = min(app["upcutoff"], MathProgBase.cbgetobj(cb))
+      gap = round((1.0 - cbgetnodeobjval(cb) / ub) * 100.0; digits=2)
+      bestbound=MathProgBase.cbgetbestbound(cb)
+   
+      # if (is_cut && gap < 0.01)
+      if is_cut && stop_cycle_cut
+         return 0
+      end
+
       num_cuts = 0
    
       x_val = getvalue.(x[data.nodes])
@@ -124,13 +222,19 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
       # is_z_val_integral = isinteger.(z_val) |> all
    
       # if is_x_val_integral && is_z_val_integral
-      ds = floyd_warshall_shortest_paths(data.graph, w_val)
+      @info("Pre Floyd Warshall")
+      @timeit to "Floyd Warshall" ds = floyd_warshall_shortest_paths(data.graph, w_val)
+      show(to)
+      println()
    
       has_cut = false
+      # @timeit to "Cycles Elimination - Outer" begin
       for k in data.nodes
+
+         # @timeit to "Cycles Elimination - Inner" begin
          for j in N(k)
-            path = a_star(data.graph, k, j, w_val)
-   
+            # @timeit to "A_star" path = 
+            a_star(data.graph, k, j, w_val)
             if (!isempty(path))
                if (ds.dists[k, j] + w_val[j, k] < x_val[k] - params_icc[:cut_tolerance])
                   lhs = append!([z[e.dst, e.src] for e in path], [z[k, j]])
@@ -142,6 +246,7 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
    
                   vars = vcat(lhs, rhs)
                   vars_value = getvalue.(vars)
+                  
    
                   if (sum(coefs .* vars_value) > 0 + params_icc[:cut_tolerance])
                      # has_cut = true
@@ -157,13 +262,28 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
                         end
                      end
                      # @info "Violated generalized cycle."
-                     print(".")
+                     # print(".")
+
+                     current_time = time()
+                     delta = current_time - cycle_cut_init_time
+                     elapsed_secs = floor(delta)
+
+                     if elapsed_secs % 2 == 0
+                        @info "Elapsed secs: $elapsed_secs | Violated generalized cycles: $num_cuts | is_cut: $is_cut | LB: $(floor(bestbound)) | Gap: $gap"
+                        # show(to)
+                        # println()
+                     end
                   end
                end
             end
          end
+         # end
       end
-      # end #
+      # end
+
+      if is_cut && num_cuts == 0
+         stop_cycle_cut = true
+      end
    
       return num_cuts
    end
@@ -533,9 +653,9 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
    end
  
    function separate_cut(cb)   
-      cover_cuts = 0
-      # @show command, app[command], app[command]["cuts"]
+      # cycle_cuts = cycle_elimination_cut(cb, is_cut=true)
 
+      cover_cuts = 0
       if "cover_cut" == app[command]["cuts"]
          # cover_cuts = cover_propagation_elimination_cut(cb, is_cut=true)
 
@@ -558,20 +678,35 @@ function icc_model(data::DataGlcip, app::Dict{String,Any}, preprocessed_sum_infl
          unsafe_store!(cb.userinteraction_p, convert(Cint,2), 1)
       end
    end
-   # @info "Builded model"
  
    # set the callback cut separation function
    addcutcallback(model, separate_cut)
-   addlazycallback(model, cycle_elimination_cut)
-   # @info "Added callback to the model"
-
-   # writeLP(model, "glcip.lp", genericnames=false)
-
+   # addlazycallback(model, cycle_elimination_cut)
+   addlazycallback(model, simple_cycle_elimination_lazy_constraint)
+   
+   
    variables = Dict(
       :x => x,
       :y => y,
       :z => z
    )
+     
+   if app["export-cplex-log"]
+      cplex_output_filename = joinpath(dirname(appfolder), "out", "CPLEX_output.log")
+      touch(cplex_output_filename)
+
+      JuMP.build(model)
+      CPLEX.set_logfile(model.internalModel.inner.env, cplex_output_filename)
+
+      @info "Export CPLEX log to file: $cplex_output_filename"
+   end
+
+   if app["export-cplex-log"]
+      lp_filename = joinpath(dirname(appfolder), "out", "glcip.lp")
+      writeLP(model, lp_filename, genericnames=false)
+
+      @info "Export .lp to file: $lp_filename"
+   end
  
    return model, variables, P, W
 end

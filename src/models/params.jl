@@ -10,6 +10,8 @@ const params_icc = Dict(
    :cut_rounds_init => 200,
    :cut_rounds_max_time => 5*60, # seconds
 
+   :pre_add_cycles_up_to_length => 4,
+
    # :cut_tolerance => 0.1, # cut tol
    :cut_tolerance => 0.01, # cut tol
    :cut_multiplier => 1000000, # new cut multiplier
